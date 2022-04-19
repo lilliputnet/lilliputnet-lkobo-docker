@@ -13,6 +13,7 @@ services:
       - ../kobo-env/envfiles/aws.txt
     volumes:
       - ./.vols/db:/var/lib/postgresql/data
+      - ./.vols/db14:/var/lib/postgresql/data14
       - ./backups/postgres:/srv/backups
       - ./log/postgres:/srv/logs
       - ./postgres:/kobo-docker-scripts
