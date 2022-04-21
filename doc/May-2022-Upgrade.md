@@ -1,17 +1,17 @@
-## Upgrading from an old version of kobo-docker (before March 2019)
+## Upgrading from an old version of kobo-docker (before May 2022)
 
-Current versions of kobo-docker require PostgreSQL 9.5 and MongoDB 3.4.
-Additionally, **Redis is now the Celery broker**, and RabbitMQ is no longer
-needed.
+Current versions of kobo-docker require PostgreSQL 14, MongoDB 5 and Redis 6
+
 
 If you are running a version of kobo-docker that was last updated prior to
-March 2019
-(i.e. commit [`5c2ef02`](https://github.com/kobotoolbox/kobo-docker/commit/5c2ef0273339bee5c374830f72e52945947042a8) or older),
+May 2022 (i.e. commit TBC or older),
 you need to upgrade your databases prior to using the current version of
 kobo-docker (this repository) or
 [kobo-install](https://github.com/kobotoolbox/kobo-install).
 
 This is a step-by-step procedure to upgrade PostgreSQL and MongoDB.
+
+**This procedure has been tested on x86 architecture only.**
 
 ### PostgreSQL
 
@@ -20,35 +20,42 @@ Check the size of the PostgreSQL database in  `.vols/db`, e.g. with
 `sudo du -hs .vols/db`, and ensure you have _more_ than this amount of space
 free.
 
+For this tutorial, we are using kobo-install to run docker-compose commands.
+If you do not use kobo-install, please replace `python run.py -cb` with `docker-compose -f docker-compose.primary.backend.template.yml -f docker-compose.primary.backend.yml [-f docker-compose.primary.backend.override.yml] [-f docker-compose.primary.backend.custom.yml]`
 
 1. Stop the containers
 
-   ```
-   docker-compose stop
-   ```
+    ```shell
+    user@computer:kobo-install$ python run.py --stop  
+    ```
 
 2. Edit composer file `docker-compose.primary.backend.template.yml`
 
-   Add this `- ./.vols/db14:/var/lib/postgresql/data/` below `- ./.vols/db:/var/lib/postgresql/data`. It should look like this.
+   - Temporarily, comment `postgis:14.2-3` to use PostgreSQL 9.5 with PostGIS 2.5  
+   - Add `- ./.vols/db14:/var/lib/postgresql/data14` below `- ./.vols/db:/var/lib/postgresql/data` 
+
+   It should look like this:
 
    ```
+   # image: postgis/postgis:14.2-3
+   image: postgis/postgis:9.5-2.5
+    hostname: postgres
+    env_file:
+      - ../kobo-env/envfile.txt
+      - ../kobo-env/envfiles/databases.txt
+      - ../kobo-env/envfiles/aws.txt
+    volumes:
       - ./.vols/db:/var/lib/postgresql/data
       - ./.vols/db14:/var/lib/postgresql/data14
    ```
 
-3. Run a one-off `postgres` container
+4. Run a one-off `postgres` container
 
-    1. With kobo-install
     ```shell
     user@computer:kobo-install$ python run.py -cb run --rm postgres bash  
     ```
-
-    2. Without kobo-install
-    ```shell
-    docker-compose -f docker-compose.primary.backend.template.yml -f docker-compose.primary.backend.yml [-f docker-compose.primary.backend.override.yml] [-f docker-compose.primary.backend.custom.yml] run --rm postgres bash
-    ```
     
-6. Install PostgreSQL 14
+5. Install PostgreSQL 14
 
     ```shell
     root@postgres:/# apt-get update
@@ -66,7 +73,7 @@ free.
     apt-get upgrade
     ```
 
-7. Init DB
+6. Init DB
 
     ```
     chown -R postgres:postgres /var/lib/postgresql/data14/
@@ -79,7 +86,7 @@ free.
     >      /usr/lib/postgresql/14/bin/pg_ctl -D /var/lib/postgresql/data14/ -l logfile start
     > ```
 
-8. Start PostgreSQL 9.6 to ensure database has been initialized successfully
+7. Start PostgreSQL 14 to ensure database has been initialized successfully
 
     ```
     su - postgres -c '/usr/lib/postgresql/14/bin/pg_ctl -D /var/lib/postgresql/data14/ start'
@@ -127,6 +134,9 @@ free.
 
     You may see some warnings `WARNING:  'postgis.backend' is already set and cannot be changed until you reconnect`. That's ok, you can keep going ahead.
 
+    Depending on your kobo-docker environment, databases may have other names.  
+    You may need to adapt the snippet below to your curren configuration.
+    
     ```
     \c postgres;
     CREATE EXTENSION IF NOT EXISTS postgis;
@@ -166,6 +176,8 @@ free.
     ```
     
 11. Restore postgres role
+    For installations created after March 2019, `postgres` role may not exist but is needed for database clusters.
+
     ```
     /usr/lib/postgresql/9.5/bin/psql -U "$POSTGRES_USER" -d postgres -q -c "CREATE USER postgres WITH SUPERUSER CREATEDB CREATEROLE REPLICATION BYPASSRLS ENCRYPTED PASSWORD '$POSTGRES_PASSWORD';"
     ```
@@ -246,6 +258,7 @@ free.
     ```
     su - postgres -c '/usr/lib/postgresql/14/bin/pg_ctl -D /var/lib/postgresql/data/ start'
     ```
+    Once again, you may need to adapt the snippet below according your current configuration.
 
     ```
     \c postgres;
@@ -259,7 +272,7 @@ free.
     ALTER EXTENSION postgis_topology UPDATE;
     ALTER EXTENSION postgis_tiger_geocoder UPDATE;
     SELECT postgis_extensions_upgrade();
-    ex
+    
     \c koboform;
     ALTER EXTENSION postgis UPDATE;
     ALTER EXTENSION postgis_topology UPDATE;
@@ -295,87 +308,89 @@ free.
     echo "host    all             all             192.0.0.0/8            trust" >> /var/lib/postgresql/data/pg_hba.conf
     ```
 
-    
-18. Test if upgrade is successful
-
-    Start your containers as usual.
-
-    1. With kobo-install
-        ```shell
-        user@computer:kobo-install$ python run.py  
-        ```
-
-    Log into one user account        
-
-19. Clean up
-
-    If everything is ok, you can now delete data from `PostgreSQL 9.5`
-    Stop `postgres` container.
-
-    1. With kobo-install
-        ```shell
-        user@computer:kobo-install$ python run.py --stop  
-        ```
-    2. Rename folder
-    ```shell
-    user@computer:kobo-docker$ sudo rm -rf .vols/db
-    user@computer:kobo-docker$ sudo mv .vols/db14 .vols/db
-    ```
-
-    Done!
-
 ### MongoDB
 
 **Upgrading Mongo is easy and only implies a couple of stop/start.**
 
-1. Upgrade to 3.0
+1. Upgrade to WiredEngine 
+    Link to HackMD 
 
-    Stop the container: `docker-compose stop mongo`
+2. Upgrade to 3.6
+
+    1. Stop `mongo` container
+
+        ```shell
+        user@computer:kobo-install$ python run.py --cb stop mongo  
+        ```
     We need to change few lines in `docker-compose.yml`
 
-    - Change image to `mongo:3.0`
-    - Change `srv` to `data`
+    - Change image to `mongo:3.6`
 
     ```
     mongo:
-      image: mongo:3.0
-      environment:
-        - MONGO_DATA=/data/db
-      ...
-      volumes:
-        - ./.vols/mongo:/data/db
+      image: mongo:3.6
+      
     ```
     Then start the container: `docker-compose up --force-recreate mongo`
 
-1. Upgrade to 3.2
-
-    Stop the container: `docker-compose stop mongo`
-    We only need to change the image in `docker-compose.yml`
-
-    - Change image to `mongo:3.2`
+    Wait for MongoDB to be ready. You should see in the console the output below: 
 
     ```
-    mongo:
-      image: mongo:3.2
-      ...
+    mongo_1        | {
+    mongo_1        | 	"numIndexesBefore" : 3,
+    mongo_1        | 	"numIndexesAfter" : 3,
+    mongo_1        | 	"note" : "all indexes already exist",
+    mongo_1        | 	"ok" : 1
+    mongo_1        | }
     ```
-    Then start the container: `docker-compose up --force-recreate mongo`
 
-1. Upgrade to 3.4
+    From another terminal, enter the container and update compatibility version.
 
-    Stop the container: `docker-compose stop mongo`
-    We only need to change the image in `docker-compose.yml`
-
-    - Change image to `mongo:3.4`
-
+    ```shell
+    root@mongo:/# mongo -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" admin
+    > db.adminCommand( { setFeatureCompatibilityVersion: "3.6" } )
+    { "ok" : 1 }
+    > exit
+    bye
+    root@mongo:/# exit
     ```
-    mongo:
-      image: mongo:3.4
-      ...
-    ```
+4. Upgrade to 4.0, 4.2, 4.4 and 5.0
+
+    Repeat step above for each version and replace the version accordingly.
+    You **must** upgrade each version one by one.
+    
     Then start the container: `docker-compose up --force-recreate mongo`
 
     Done!
 
 
-You can now use latest version of kobo-docker (or use kobo-install)
+## Tests
+
+1. Test if upgrade is successful
+
+    Start your containers as usual.
+
+    ```shell
+    user@computer:kobo-install$ python run.py  
+    ```
+
+    Log into one of your user accounts and validate everything is working as expected.         
+
+2. Clean up
+
+   If everything is ok, you can now delete data from `PostgreSQL 9.5`
+
+   1. Stop containers
+    
+       ```shell
+       user@computer:kobo-install$ python run.py --stop  
+       ```
+    
+   2. Rename folder
+    
+        ```shell
+        user@computer:kobo-docker$ sudo rm -rf .vols/db
+        user@computer:kobo-docker$ sudo mv .vols/db14 .vols/db
+        ```
+
+   Done!
