@@ -322,15 +322,16 @@ If you do not use kobo-install, please replace `python run.py -cb` with `docker-
         ```shell
         user@computer:kobo-install$ python run.py --cb stop mongo  
         ```
-    We need to change few lines in `docker-compose.yml`
+       
+    2. Edit composer file `docker-compose.primary.backend.template.yml`
 
     - Change image to `mongo:3.6`
 
     ```
     mongo:
       image: mongo:3.6
-      
     ```
+   
     Then start the container: `docker-compose up --force-recreate mongo`
 
     Wait for MongoDB to be ready. You should see in the console the output below: 
@@ -354,7 +355,7 @@ If you do not use kobo-install, please replace `python run.py -cb` with `docker-
     bye
     root@mongo:/# exit
     ```
-4. Upgrade to 4.0, 4.2, 4.4 and 5.0
+3. Upgrade to 4.0, 4.2, 4.4 and 5.0
 
     Repeat step above for each version and replace the version accordingly.
     You **must** upgrade each version one by one.
